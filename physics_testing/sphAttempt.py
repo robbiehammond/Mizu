@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import gamma
 
+#TODO if beyond boundary, set it's position back to the boundary and then inverse it's velocity 
+# + multiple vecolity by a component perp to the wall with a damping factor
+
 """
 Create Your Own Smoothed-Particle-Hydrodynamics Simulation (With Python)
 Philip Mocz (2020) Princeton Univeristy, @PMocz
@@ -156,7 +159,7 @@ def main():
 	""" N-body simulation """
 	
 	# Simulation parameters
-	N         = 1000   # Number of particles
+	N         = 300   # Number of particles
 	t         = 0      # current time of the simulation
 	tEnd      = 12     # time at which simulation ends
 	dt        = 0.04   # timestep
@@ -174,7 +177,7 @@ def main():
 	m     = 6                    # single particle mass
 	pos = np.zeros(shape=(N, 3))         # particle positions
 	for i in range(0, N):
-		posi = np.array([[np.random.uniform(.5,5), np.random.uniform(.5, 5), np.random.uniform(.5, 5)]])
+		posi = np.array([[np.random.uniform(1, 3), np.random.uniform(1, 3), np.random.uniform(1, 3)]])
 		pos[i] = posi
 	vel   = np.zeros(pos.shape)
 	
@@ -212,6 +215,27 @@ def main():
 		
 		# get density for plottiny
 		rho = getDensity( pos, pos, m, h )
+
+		out_of_bottom_boundary = pos[:, 1] < 0
+		vel[out_of_bottom_boundary, 1] *= -0.9
+		pos[out_of_bottom_boundary, 1] = 0
+
+		out_of_top_boundary = pos[:, 1] > 5
+		vel[out_of_top_boundary, 1] *= -0.9
+		pos[out_of_top_boundary, 1] = 4
+
+		out_of_left_boundary = pos[:, 0] < 0
+		vel[out_of_left_boundary, 0] *= -0.9
+		pos[out_of_left_boundary, 0] = 0
+
+		out_of_right_boundary = pos[:, 0] > 5
+		vel[out_of_right_boundary, 0] *= -0.9
+		pos[out_of_right_boundary, 0] = 4
+
+
+
+
+
 		
 		# plot in real time
 		if plotRealTime or (i == Nt-1):
