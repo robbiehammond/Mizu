@@ -12,7 +12,7 @@ Philip Mocz (2020) Princeton Univeristy, @PMocz
 Simulate the structure of a star with SPH
 """
 
-def W( x, y, z, h ):
+def W( x, y, h ):
 	"""
 	Gausssian Smoothing kernel (3D)
 	x     is a vector/matrix of x positions
@@ -22,14 +22,14 @@ def W( x, y, z, h ):
 	w     is the evaluated smoothing function
 	"""
 	
-	r = np.sqrt(x**2 + y**2 + z**2)
+	r = np.sqrt(x**2 + y**2)
 	
 	w = (1.0 / (h*np.sqrt(np.pi)))**3 * np.exp( -r**2 / h**2)
 	
 	return w
 	
 	
-def gradW( x, y, z, h ):
+def gradW( x, y, h ):
 	"""
 	Gradient of the Gausssian Smoothing kernel (3D)
 	x     is a vector/matrix of x positions
@@ -39,14 +39,13 @@ def gradW( x, y, z, h ):
 	wx, wy, wz     is the evaluated gradient
 	"""
 	
-	r = np.sqrt(x**2 + y**2 + z**2)
+	r = np.sqrt(x**2 + y**2)
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
 	wx = n * x
 	wy = n * y
-	wz = n * z
 	
-	return wx, wy, wz
+	return wx, wy
 	
 	
 def getPairwiseSeparations( ri, rj ):
@@ -63,19 +62,16 @@ def getPairwiseSeparations( ri, rj ):
 	# positions ri = (x,y,z)
 	rix = ri[:,0].reshape((M,1))
 	riy = ri[:,1].reshape((M,1))
-	riz = ri[:,2].reshape((M,1))
 	
 	# other set of points positions rj = (x,y,z)
 	rjx = rj[:,0].reshape((N,1))
 	rjy = rj[:,1].reshape((N,1))
-	rjz = rj[:,2].reshape((N,1))
 	
 	# matrices that store all pairwise particle separations: r_i - r_j
 	dx = rix - rjx.T
 	dy = riy - rjy.T
-	dz = riz - rjz.T
 	
-	return dx, dy, dz
+	return dx, dy,
 	
 
 def getDensity( r, pos, m, h ):
@@ -90,9 +86,9 @@ def getDensity( r, pos, m, h ):
 	
 	M = r.shape[0]
 	
-	dx, dy, dz = getPairwiseSeparations( r, pos );
+	dx, dy = getPairwiseSeparations( r, pos )
 	
-	rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
+	rho = np.sum( m * W(dx, dy, h), 1 ).reshape((M,1))
 	
 	return rho
 	
@@ -134,16 +130,15 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	P = getPressure(rho, k, n)
 	
 	# Get pairwise distances and gradients
-	dx, dy, dz = getPairwiseSeparations( pos, pos )
-	dWx, dWy, dWz = gradW( dx, dy, dz, h )
+	dx, dy = getPairwiseSeparations( pos, pos )
+	dWx, dWy = gradW( dx, dy, h )
 	
 	# Add Pressure contribution to accelerations
 	ax = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWx, 1).reshape((N,1))
 	ay = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWy, 1).reshape((N,1))
-	az = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWz, 1).reshape((N,1))
 	
 	# pack together the acceleration components
-	a = np.hstack((ax,ay,az))
+	a = np.hstack((ax,ay))
 	
 	# Add external potential force
 	a -= lmbda * pos
@@ -159,25 +154,26 @@ def main():
 	""" N-body simulation """
 	
 	# Simulation parameters
-	N         = 300   # Number of particles
+	N         = 500   # Number of particles
 	t         = 0      # current time of the simulation
-	tEnd      = 12     # time at which simulation ends
+	tEnd      = 100     # time at which simulation ends
 	dt        = 0.04   # timestep
 	h         = 0.1    # smoothing length
 	k         = 0.1    # equation of state constant
-	n         = 1      # polytropic index
+	n         = 2      # polytropic index
 	nu        = .5      # damping
+	m     = 1                    # single particle mass
+	g = 9.81			# gravity
+	lmbda = np.array([[0.0, g]]) # external force constant
 
 	plotRealTime = True # switch on for plotting as the simulation goes along
 	
 	# Generate Initial Conditions
 	np.random.seed(42)            # set the random number generator seed
 	
-	lmbda = np.array([[0.0, 1, 0]]) # external force constant
-	m     = 6                    # single particle mass
-	pos = np.zeros(shape=(N, 3))         # particle positions
+	pos = np.zeros(shape=(N, 2))         # particle positions
 	for i in range(0, N):
-		posi = np.array([[np.random.uniform(1, 3), np.random.uniform(1, 3), np.random.uniform(1, 3)]])
+		posi = np.array([[np.random.uniform(1, 3), np.random.uniform(1, 3) ]])
 		pos[i] = posi
 	vel   = np.zeros(pos.shape)
 	
@@ -197,7 +193,7 @@ def main():
 	rr[:,0] =rlin
 	
 	# Simulation Main Loop
-	for i in range(Nt):
+	while (True):
 		# (1/2) kick
 		vel += acc * dt/2
 		
@@ -222,7 +218,7 @@ def main():
 
 		out_of_top_boundary = pos[:, 1] > 5
 		vel[out_of_top_boundary, 1] *= -0.9
-		pos[out_of_top_boundary, 1] = 4
+		pos[out_of_top_boundary, 1] = 5
 
 		out_of_left_boundary = pos[:, 0] < 0
 		vel[out_of_left_boundary, 0] *= -0.9
@@ -230,7 +226,7 @@ def main():
 
 		out_of_right_boundary = pos[:, 0] > 5
 		vel[out_of_right_boundary, 0] *= -0.9
-		pos[out_of_right_boundary, 0] = 4
+		pos[out_of_right_boundary, 0] = 5
 
 
 
@@ -238,7 +234,7 @@ def main():
 
 		
 		# plot in real time
-		if plotRealTime or (i == Nt-1):
+		if plotRealTime:
 			plt.sca(ax1)
 			plt.cla()
 			cval = np.minimum((rho-3)/3,1).flatten()
@@ -254,18 +250,6 @@ def main():
 			ax2.set_aspect(0.1)
 			rho_radial = getDensity( rr, pos, m, h )
 			plt.pause(0.001)
-		
-	
-	
-	# add labels/legend
-	plt.sca(ax2)
-	plt.xlabel('radius')
-	plt.ylabel('density')
-	
-	# Save figure
-	plt.show()
-		
-	return 0
 	
 
 
