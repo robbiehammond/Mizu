@@ -209,29 +209,29 @@ def main():
 		t += dt
 
 		# if particle is at exceeds, reverse its velocity, dampen it a bit, and put it back in the bounding container
-		out_of_bottom_boundary = pos[:, 1] < 0
-		vel[out_of_bottom_boundary, 1] *= -df
-		pos[out_of_bottom_boundary, 1] = 0
+		out_of_left_boundary = pos[:, 0] < min_X
+		vel[out_of_left_boundary, 0] *= df
+		pos[out_of_left_boundary, 0] = min_X
 
-		out_of_top_boundary = pos[:, 1] > 5
-		vel[out_of_top_boundary, 1] *= -df
-		pos[out_of_top_boundary, 1] = 5
+		out_of_right_boundary = pos[:, 0] > max_X
+		vel[out_of_right_boundary, 0] *= df
+		pos[out_of_right_boundary, 0] = max_X
 
-		out_of_left_boundary = pos[:, 0] < 0
-		vel[out_of_left_boundary, 0] *= -df
-		pos[out_of_left_boundary, 0] = 0
+		out_of_bottom_boundary = pos[:, 1] < min_Y
+		vel[out_of_bottom_boundary, 1] *= df
+		pos[out_of_bottom_boundary, 1] = min_Y
 
-		out_of_right_boundary = pos[:, 0] > 5
-		vel[out_of_right_boundary, 0] *= -df
-		pos[out_of_right_boundary, 0] = 5
+		out_of_top_boundary = pos[:, 1] > max_Y
+		vel[out_of_top_boundary, 1] *= df
+		pos[out_of_top_boundary, 1] = max_Y
 
-		out_of_back_boundary = pos[:, 2] < 0
-		vel[out_of_back_boundary, 2] *= -df
-		pos[out_of_back_boundary, 2] = 0
+		out_of_back_boundary = pos[:, 2] < min_Z
+		vel[out_of_back_boundary, 2] *= df
+		pos[out_of_back_boundary, 2] = min_Z
 
-		out_of_front_boundary = pos[:, 2] > 5
-		vel[out_of_front_boundary, 2] *= -df
-		pos[out_of_front_boundary, 2] = 5
+		out_of_front_boundary = pos[:, 2] > max_Z
+		vel[out_of_front_boundary, 2] *= df
+		pos[out_of_front_boundary, 2] = max_Z
 
 
 		# render stuff
