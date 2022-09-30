@@ -1,18 +1,7 @@
 import numpy as np
-# import matplotlib.pyplot as plt
 from scipy.special import gamma
 import taichi as ti
 ti.init(arch=ti.cpu)
-
-#TODO if beyond boundary, set it's position back to the boundary and then inverse it's velocity 
-# + multiple vecolity by a component perp to the wall with a damping factor
-
-"""
-Create Your Own Smoothed-Particle-Hydrodynamics Simulation (With Python)
-Philip Mocz (2020) Princeton Univeristy, @PMocz
-
-Simulate the structure of a star with SPH
-"""
 
 def W( x, y, z, h ):
 	"""
@@ -23,7 +12,6 @@ def W( x, y, z, h ):
 	h     is the smoothing length
 	w     is the evaluated smoothing function
 	"""
-	
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	w = (1.0 / (h*np.sqrt(np.pi)))**3 * np.exp( -r**2 / h**2)
@@ -40,7 +28,6 @@ def gradW( x, y, z, h ):
 	h     is the smoothing length
 	wx, wy, wz     is the evaluated gradient
 	"""
-	
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
@@ -58,7 +45,6 @@ def getPairwiseSeparations( ri, rj ):
 	rj    is an N x 3 matrix of positions
 	dx, dy, dz   are M x N matrices of separations
 	"""
-	
 	M = ri.shape[0]
 	N = rj.shape[0]
 	
@@ -89,7 +75,6 @@ def getDensity( r, pos, m, h ):
 	h     is the smoothing length
 	rho   is M x 1 vector of accelerations
 	"""
-	
 	M = r.shape[0]
 	
 	dx, dy, dz = getPairwiseSeparations( r, pos )
@@ -107,7 +92,6 @@ def getPressure(rho, k, n):
 	n     polytropic index
 	P     pressure
 	"""
-	
 	P = k * rho**(1+1/n)
 	
 	return P
@@ -126,7 +110,6 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	nu    viscosity
 	a     is N x 3 matrix of accelerations
 	"""
-	
 	N = pos.shape[0]
 	
 	# Calculate densities at the position of the particles
@@ -161,48 +144,49 @@ def main():
 	""" N-body simulation """
 	
 	# Simulation parameters
-	N         = 100   # Number of particles
-	t         = 0      # current time of the simulation
-	tEnd      = 100     # time at which simulation ends
-	dt        = 0.04   # timestep
-	h         = 0.1    # smoothing length
-	k         = 0.1    # equation of state constant
-	n         = 2      # polytropic index
-	nu        = .3      # damping
-	m     = 1                    # single particle mas
-	g = 9.8			# gravity
-	lmbda = np.array([[0.0, g, 0.0]]) # external force constant
+	# Note: Beware settings minimum X/Y/Z values to negative, especially Y: forces like gravity will begin to work in reverse
+	### ---------------------------------------------- ###
+	N          = 100    # Number of particles
+	t          = 0      # current time of the simulation
+	tEnd       = 100    # time at which simulation ends
+	dt         = 0.04   # timestep
+	h          = 0.1    # smoothing length
+	k          = 0.1    # equation of state constant
+	n          = 2      # polytropic index
+	nu         = .3     # damping
+	m          = 1      # single particle mas
+	g          = 9.8	# gravity
+	df         = -0.9   # damping factor (negative = lose energy on collision, positive = gain energy on collision)
+	external_X = 0.0    #external constant x force
+	external_Y = g      #external constant y force (note positive is down)
+	external_Z = 0.0    #external constant z force
+	seed        = 1     #random seed for initial positions 
+	max_X       = 5 	#maximum x boundary for container
+	max_Y       = 5	    #maximum y boundary for container
+	max_Z       = 5		#maximum z boundary for container
+	min_X       = 0		#minimum x boundary for container
+	min_Y       = 0		#minimum y boundary for container	
+	min_Z       = 0	    #minimum z boundary for container
+	### ---------------------------------------------- ###
 
-	plotRealTime = True # switch on for plotting as the simulation goes along
-	
-	# Generate Initial Conditions
-	np.random.seed(42)            # set the random number generator seed
+	np.random.seed(seed) #set random seed
+
+	lmbda = np.array([[external_X, external_Y, external_Z]]) # pack external force constants into a vector
 	
 	pos = np.zeros(shape=(N, 3))         # particle positions
-	# pos_field = ti.field(float, shape=(N, 2))
+	vel = np.zeros(pos.shape)        # particle velocities (all initialized to 0)
 	pos_field = ti.Vector.field(3, float, shape=(N,))
 	colors = ti.Vector.field(3, float, shape=(N,))
+
+	# Initialize particle positions/colors randomly 
 	for i in range(0, N):
-		posi = np.array([[np.random.uniform(1, 3), np.random.uniform(1, 3), np.random.uniform(1,3) ]])
-		pos[i] = posi
+		pos[i] = np.array([[np.random.uniform(min_X, max_X), np.random.uniform(min_Y, max_Y), np.random.uniform(min_Z, max_Z) ]])
 		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
-	vel   = np.zeros(pos.shape)
 	
+
 	# calculate initial gravitational accelerations
 	acc = getAcc( pos, vel, m, h, k, n, lmbda, nu )
 	
-	# number of timesteps
-	Nt = int(np.ceil(tEnd/dt))
-	
-	# prep figure
-	# fig = plt.figure(figsize=(4,5), dpi=80)
-	# grid = plt.GridSpec(6, 1, wspace=0.0, hspace=0.3)
-	# ax1 = plt.subplot(grid[0:5,0])
-	# ax2 = plt.subplot(grid[5,0])
-	rr = np.zeros((100,3))
-	rlin = np.linspace(0,1,100)
-	rr[:,0] =rlin
-
 	window = ti.ui.Window('N-Body', (1280, 720), vsync=True)
 	canvas = window.get_canvas()
 	camera = ti.ui.Camera()
@@ -224,37 +208,34 @@ def main():
 		
 		# update time
 		t += dt
-		
-		# get density for plottiny
-		rho = getDensity( pos, pos, m, h )
 
+		# if particle is at exceeds, reverse its velocity, dampen it a bit, and put it back in the bounding container
 		out_of_bottom_boundary = pos[:, 1] < 0
-		vel[out_of_bottom_boundary, 1] *= -0.9
+		vel[out_of_bottom_boundary, 1] *= -df
 		pos[out_of_bottom_boundary, 1] = 0
 
 		out_of_top_boundary = pos[:, 1] > 5
-		vel[out_of_top_boundary, 1] *= -0.9
+		vel[out_of_top_boundary, 1] *= -df
 		pos[out_of_top_boundary, 1] = 5
 
 		out_of_left_boundary = pos[:, 0] < 0
-		vel[out_of_left_boundary, 0] *= -0.9
+		vel[out_of_left_boundary, 0] *= -df
 		pos[out_of_left_boundary, 0] = 0
 
 		out_of_right_boundary = pos[:, 0] > 5
-		vel[out_of_right_boundary, 0] *= -0.9
+		vel[out_of_right_boundary, 0] *= -df
 		pos[out_of_right_boundary, 0] = 5
 
 		out_of_back_boundary = pos[:, 2] < 0
-		vel[out_of_back_boundary, 2] *= -0.9
+		vel[out_of_back_boundary, 2] *= -df
 		pos[out_of_back_boundary, 2] = 0
 
 		out_of_front_boundary = pos[:, 2] > 5
-		vel[out_of_front_boundary, 2] *= -0.9
+		vel[out_of_front_boundary, 2] *= -df
 		pos[out_of_front_boundary, 2] = 5
 
 
-
-
+		# render stuff
 		pos_field.from_numpy(pos)
 		camera.track_user_inputs(window, hold_key=ti.ui.LMB)
 		scene.ambient_light((1, 1, 1))
