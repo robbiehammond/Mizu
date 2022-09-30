@@ -148,12 +148,11 @@ def main():
 	### ---------------------------------------------- ###
 	N          = 100    # Number of particles
 	t          = 0      # current time of the simulation
-	tEnd       = 100    # time at which simulation ends
 	dt         = 0.04   # timestep
 	h          = 0.1    # smoothing length
 	k          = 0.1    # equation of state constant
 	n          = 2      # polytropic index
-	nu         = .3     # damping
+	nu         = .3     # viscosity damping
 	m          = 1      # single particle mas
 	g          = 9.8	# gravity
 	df         = -0.9   # damping factor (negative = lose energy on collision, positive = gain energy on collision)
