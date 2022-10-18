@@ -14,9 +14,20 @@ def W( x, y, z, h ):
 	h     is the smoothing length
 	w     is the evaluated smoothing function
 	"""
-	r = np.sqrt(x**2 + y**2 + z**2)
+	M, N = x.shape
+	r = ti.field(float, shape=(M,N))
+	for i in range(M):
+		for j in range(N):
+			r[i,j] = np.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
+
+	for i in range(M):
+		for j in range(N):
+			pass
 	
-	w = (1.0 / (h*np.sqrt(np.pi)))**3 * np.exp( -r**2 / h**2)
+	# next thing to do is to write this odd logic in terms of taichi stuff
+	# wtf does e^(matrix) even mean? that's a task for me to figure out later.
+	const = (1.0 / (h*math.sqrt(math.pi)))**3 
+	w = const * np.exp( -r**2 / h**2)
 	
 	return w
 	
@@ -78,7 +89,6 @@ def getPairwiseSeparations(ri: ti.template(), rj: ti.template()):
 			dx[i, j] = rix[i] - rjx[j]
 			dy[i, j] = riy[i] - rjy[j]
 			dz[i, j] = riz[i] - rjz[j]
-	print(dx, dy, dz)
 	return dx, dy, dz
 	
 
