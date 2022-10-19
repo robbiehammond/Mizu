@@ -20,16 +20,13 @@ def W( x, y, z, h ):
 		for j in range(N):
 			r[i,j] = np.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
 
+	const = (1.0 / (h*math.sqrt(math.pi)))**3 
 	for i in range(M):
 		for j in range(N):
-			pass
+			r[i, j] = const * pow(math.e, -r[i,j]**2 / h**2)
 	
-	# next thing to do is to write this odd logic in terms of taichi stuff
-	# wtf does e^(matrix) even mean? that's a task for me to figure out later.
-	const = (1.0 / (h*math.sqrt(math.pi)))**3 
-	w = const * np.exp( -r**2 / h**2)
-	
-	return w
+	print(r)
+	return r
 	
 	
 def gradW( x, y, z, h ):
