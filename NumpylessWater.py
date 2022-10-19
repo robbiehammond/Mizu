@@ -25,7 +25,6 @@ def W( x, y, z, h ):
 		for j in range(N):
 			r[i, j] = const * pow(math.e, -r[i,j]**2 / h**2)
 	
-	print(r)
 	return r
 	
 	
@@ -99,10 +98,19 @@ def getDensity( r, pos, m, h ):
 	rho   is M x 1 vector of accelerations
 	"""
 	M = r.shape[0]
+	N = pos.shape[0]
 	
 	dx, dy, dz = getPairwiseSeparations( r, pos )
-	
-	rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
+	rho = ti.field(float, shape=(M, 1))
+	res = W( dx, dy, dz, h )
+	print(res)
+	for i in range(M):
+		for j in range(N):
+			rho[i, 0] = m * res[i,j]
+	print(rho.shape)
+
+		
+	#rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
 	
 	return rho
 	
