@@ -18,7 +18,7 @@ def W( x, y, z, h ):
 	r = ti.field(float, shape=(M,N))
 	for i in range(M):
 		for j in range(N):
-			r[i,j] = np.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
+			r[i,j] = math.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
 
 	const = (1.0 / (h*math.sqrt(math.pi)))**3 
 	for i in range(M):
@@ -37,12 +37,28 @@ def gradW( x, y, z, h ):
 	h     is the smoothing length
 	wx, wy, wz     is the evaluated gradient
 	"""
-	r = np.sqrt(x**2 + y**2 + z**2)
+
+	M, N = x.shape
+	r = ti.field(float, shape=(M,N))
+	for i in range(M):
+		for j in range(N):
+			r[i,j] = math.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
 	
-	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
-	wx = n * x
-	wy = n * y
-	wz = n * z
+
+	n = ti.field(float, shape=(M,N))
+
+	for i in range(M):
+		for j in range(N):
+			n[i, j] = -2 * math.pow(math.e, (-r[i,j]**2 / h**2)) / (h**5) / ((math.pi)**(3/2))
+	print(n)
+	wx = ti.field(float, shape=(M,N))
+	wy = ti.field(float, shape=(M,N))
+	wz = ti.field(float, shape=(M,N))
+	for i in range(M):
+		for j in range(N):
+			wx[i, j] = n[i,j] * x[i,j]
+			wy[i, j] = n[i,j] * y[i,j]
+			wz[i, j] = n[i,j] * z[i,j]
 	
 	return wx, wy, wz
 	
@@ -85,6 +101,7 @@ def getPairwiseSeparations(ri: ti.template(), rj: ti.template()):
 			dx[i, j] = rix[i] - rjx[j]
 			dy[i, j] = riy[i] - rjy[j]
 			dz[i, j] = riz[i] - rjz[j]
+	print(dx, dy, dz)
 	return dx, dy, dz
 	
 
@@ -103,12 +120,9 @@ def getDensity( r, pos, m, h ):
 	dx, dy, dz = getPairwiseSeparations( r, pos )
 	rho = ti.field(float, shape=(M, 1))
 	res = W( dx, dy, dz, h )
-	print(res)
 	for i in range(M):
 		for j in range(N):
 			rho[i, 0] = m * res[i,j]
-	print(rho.shape)
-
 		
 	#rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
 	
@@ -123,7 +137,9 @@ def getPressure(rho, k, n):
 	n     polytropic index
 	P     pressure
 	"""
-	P = k * rho**(1+1/n)
+	P = ti.field(float, shape=rho.shape)
+	for i in range(rho.shape[0]):
+		P[i,0] = k * rho[i,0]**n
 	
 	return P
 	
@@ -154,18 +170,27 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	dWx, dWy, dWz = gradW( dx, dy, dz, h )
 	
 	# Add Pressure contribution to accelerations
-	ax = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWx, 1).reshape((N,1))
-	ay = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWy, 1).reshape((N,1))
-	az = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWz, 1).reshape((N,1))
+	ax = ti.field(float, shape=(N,1))
+	ay = ti.field(float, shape=(N,1))
+	az = ti.field(float, shape=(N,1))
+	for i in range(N):
+		ax[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWx[i, 0]
+		ay[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWy[i, 0]
+		az[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWz[i, 0]
+
+
 	
 	# pack together the acceleration components
-	a = np.hstack((ax,ay,az))
-	
 	# Add external potential force
-	a -= lmbda * pos
+	a = ti.Vector.field(3, float, (N,1))
+	for i in range(N):
+		print(lmbda[1])
+		new_a_x = ax[i, 0] - (lmbda[0] * pos[i].x - (nu * vel[i].x))
+		new_a_y = ay[i, 0] - (lmbda[1] * pos[i].y - (nu * vel[i].y))
+		new_a_z = az[i, 0] - (lmbda[2] * pos[i].z - (nu * vel[i].z))
+		a[i,0] = ti.Vector([new_a_x, new_a_y, new_a_z])
+
 	
-	# Add viscosity
-	a -= nu * vel
 	
 	return a
 	
@@ -201,7 +226,7 @@ def main():
 
 	np.random.seed(seed) #set random seed
 
-	lmbda = np.array([[external_X, external_Y, external_Z]]) # pack external force constants into a vector
+	lmbda = ti.Vector([[external_X, external_Y, external_Z]]) # pack external force constants into a vector
 	
 	pos = ti.Vector.field(3, float, shape=(N,))         # particle positions
 	vel = ti.Vector.field(3, float, shape=(N,))        # particle velocities (all initialized to 0)
@@ -210,7 +235,7 @@ def main():
 
 	# Initialize particle positions/colors randomly 
 	for i in range(0, N):
-		pos[i] = ti.Vector([[1, 2, 3 ]])
+		pos[i] = ti.Vector([[1, 2, 3]])
 		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
 	
 
@@ -226,16 +251,26 @@ def main():
 	# Simulation Main Loop
 	while window.running:
 		# (1/2) kick
-		vel += acc * dt/2
+		for i in range(N):
+			vel[i].x += acc[i,0].x * dt / 2
+			vel[i].y += acc[i,0].y * dt / 2
+			vel[i].z += acc[i,0].z * dt / 2
+
+			
+		for i in range(N):
+			pos[i].x += dt * vel[i].x
+			pos[i].y += dt * vel[i].y
+			pos[i].z += dt * vel[i].z
 		
-		# drift
-		pos += vel * dt
-		
+
 		# update accelerations
 		acc = getAcc( pos, vel, m, h, k, n, lmbda, nu )
 		
 		# (1/2) kick
-		vel += acc * dt/2
+		for i in range(N):
+			vel[i].x += 0.5 * dt * acc[i, 0].x
+			vel[i].y += 0.5 * dt * acc[i, 0].y
+			vel[i].z += 0.5 * dt * acc[i, 0].z
 		
 		# update time
 		t += dt

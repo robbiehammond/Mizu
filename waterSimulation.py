@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import gamma
 import taichi as ti
 ti.init(arch=ti.cpu)
+first = True
 
 def W( x, y, z, h ):
 	"""
@@ -20,6 +21,7 @@ def W( x, y, z, h ):
 	
 	
 def gradW( x, y, z, h ):
+	global first
 	"""
 	Gradient of the Gausssian Smoothing kernel (3D)
 	x     is a vector/matrix of x positions
@@ -31,6 +33,7 @@ def gradW( x, y, z, h ):
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
+	print(n)
 	wx = n * x
 	wy = n * y
 	wz = n * z
@@ -45,6 +48,7 @@ def getPairwiseSeparations( ri, rj ):
 	rj    is an N x 3 matrix of positions
 	dx, dy, dz   are M x N matrices of separations
 	"""
+	global first
 	M = ri.shape[0]
 	N = rj.shape[0]
 	
@@ -62,11 +66,11 @@ def getPairwiseSeparations( ri, rj ):
 	dx = rix - rjx.T
 	dy = riy - rjy.T
 	dz = riz - rjz.T
-	
 	return dx, dy, dz
 	
 
 def getDensity( r, pos, m, h ):
+	global first
 	"""
 	Get Density at sampling loctions from SPH particle distribution
 	r     is an M x 3 matrix of sampling locations
@@ -78,7 +82,7 @@ def getDensity( r, pos, m, h ):
 	M = r.shape[0]
 	
 	dx, dy, dz = getPairwiseSeparations( r, pos )
-	
+
 	rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
 	
 	return rho
@@ -179,7 +183,7 @@ def main():
 
 	# Initialize particle positions/colors randomly 
 	for i in range(0, N):
-		pos[i] = np.array([[np.random.uniform(min_X, max_X), np.random.uniform(min_Y, max_Y), np.random.uniform(min_Z, max_Z) ]])
+		pos[i] = np.array([[1,2,3]])
 		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
 	
 
