@@ -27,7 +27,26 @@ def W( x, y, z, h ):
 	
 	return r
 	
-	
+@ti.kernel
+def populateR(M: int, N: int, r: ti.template(), x: ti.template(), y: ti.template(), z: ti.template()): 
+	for i in range(M):
+		for j in range(N):
+			r[i,j] = ti.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
+
+@ti.kernel
+def populateN(M: int, N: int, n: ti.template(), r: ti.template(), h: float):
+	for i in range(M):
+		for j in range(N):
+			n[i, j] = -2 * ti.pow(math.e, (-r[i,j]**2 / h**2)) / (h**5) / ((math.pi)**(3/2))
+
+@ti.kernel
+def populateW(M: int, N: int, wx: ti.template(), wy: ti.template(), wz: ti.template(), n: ti.template(), x: ti.template(), y: ti.template(), z: ti.template()):
+	for i in range(M):
+		for j in range(N):
+			wx[i, j] = n[i,j] * x[i,j]
+			wy[i, j] = n[i,j] * y[i,j]
+			wz[i, j] = n[i,j] * z[i,j]
+
 def gradW( x, y, z, h ):
 	"""
 	Gradient of the Gausssian Smoothing kernel (3D)
@@ -40,25 +59,17 @@ def gradW( x, y, z, h ):
 
 	M, N = x.shape
 	r = ti.field(float, shape=(M,N))
-	for i in range(M):
-		for j in range(N):
-			r[i,j] = math.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
+	populateR(M, N, r, x, y, z)
 	
 
 	n = ti.field(float, shape=(M,N))
-
-	for i in range(M):
-		for j in range(N):
-			n[i, j] = -2 * math.pow(math.e, (-r[i,j]**2 / h**2)) / (h**5) / ((math.pi)**(3/2))
+	populateN(M, N, n, r, h)
 	print(n)
+
 	wx = ti.field(float, shape=(M,N))
 	wy = ti.field(float, shape=(M,N))
 	wz = ti.field(float, shape=(M,N))
-	for i in range(M):
-		for j in range(N):
-			wx[i, j] = n[i,j] * x[i,j]
-			wy[i, j] = n[i,j] * y[i,j]
-			wz[i, j] = n[i,j] * z[i,j]
+	populateW(M, N, wx, wy, wz, n, x, y, z)
 	
 	return wx, wy, wz
 	
@@ -101,7 +112,6 @@ def getPairwiseSeparations(ri: ti.template(), rj: ti.template()):
 			dx[i, j] = rix[i] - rjx[j]
 			dy[i, j] = riy[i] - rjy[j]
 			dz[i, j] = riz[i] - rjz[j]
-	print(dx, dy, dz)
 	return dx, dy, dz
 	
 
@@ -184,7 +194,6 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	# Add external potential force
 	a = ti.Vector.field(3, float, (N,1))
 	for i in range(N):
-		print(lmbda[1])
 		new_a_x = ax[i, 0] - (lmbda[0] * pos[i].x - (nu * vel[i].x))
 		new_a_y = ay[i, 0] - (lmbda[1] * pos[i].y - (nu * vel[i].y))
 		new_a_z = az[i, 0] - (lmbda[2] * pos[i].z - (nu * vel[i].z))
@@ -275,34 +284,7 @@ def main():
 		# update time
 		t += dt
 
-		# if particle is at exceeds, reverse its velocity, dampen it a bit, and put it back in the bounding container
-		out_of_left_boundary = pos[:, 0] < min_X
-		vel[out_of_left_boundary, 0] *= df
-		pos[out_of_left_boundary, 0] = min_X
-
-		out_of_right_boundary = pos[:, 0] > max_X
-		vel[out_of_right_boundary, 0] *= df
-		pos[out_of_right_boundary, 0] = max_X
-
-		out_of_bottom_boundary = pos[:, 1] < min_Y
-		vel[out_of_bottom_boundary, 1] *= df
-		pos[out_of_bottom_boundary, 1] = min_Y
-
-		out_of_top_boundary = pos[:, 1] > max_Y
-		vel[out_of_top_boundary, 1] *= df
-		pos[out_of_top_boundary, 1] = max_Y
-
-		out_of_back_boundary = pos[:, 2] < min_Z
-		vel[out_of_back_boundary, 2] *= df
-		pos[out_of_back_boundary, 2] = min_Z
-
-		out_of_front_boundary = pos[:, 2] > max_Z
-		vel[out_of_front_boundary, 2] *= df
-		pos[out_of_front_boundary, 2] = max_Z
-
-
 		# render stuff
-		pos_field.from_numpy(pos)
 		camera.track_user_inputs(window, hold_key=ti.ui.LMB)
 		scene.ambient_light((1, 1, 1))
 		scene.particles(pos_field, radius=0.05, per_vertex_color=colors)
