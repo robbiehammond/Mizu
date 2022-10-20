@@ -1,9 +1,16 @@
 import numpy as np
 from scipy.special import gamma
 import taichi as ti
+import random
 import math 
 
 ti.init(arch=ti.cpu)
+
+@ti.kernel
+def populateRExp(M: int, N: int, const: float, r: ti.template(), h: float):
+	for i in range(M):
+		for j in range(N):
+			r[i,j] = const * pow(math.e, -r[i,j]**2 / h**2)
 
 def W( x, y, z, h ):
 	"""
@@ -16,14 +23,10 @@ def W( x, y, z, h ):
 	"""
 	M, N = x.shape
 	r = ti.field(float, shape=(M,N))
-	for i in range(M):
-		for j in range(N):
-			r[i,j] = math.sqrt(x[i,j]**2 + y[i,j]**2 + z[i,j]**2)
+	populateR(M, N, r, x, y, z)
 
 	const = (1.0 / (h*math.sqrt(math.pi)))**3 
-	for i in range(M):
-		for j in range(N):
-			r[i, j] = const * pow(math.e, -r[i,j]**2 / h**2)
+	populateRExp(M, N, const, r, h)
 	
 	return r
 	
@@ -61,10 +64,8 @@ def gradW( x, y, z, h ):
 	r = ti.field(float, shape=(M,N))
 	populateR(M, N, r, x, y, z)
 	
-
 	n = ti.field(float, shape=(M,N))
 	populateN(M, N, n, r, h)
-	print(n)
 
 	wx = ti.field(float, shape=(M,N))
 	wy = ti.field(float, shape=(M,N))
@@ -73,6 +74,28 @@ def gradW( x, y, z, h ):
 	
 	return wx, wy, wz
 	
+
+@ti.kernel
+def populateRI(M: int, ri: ti.template(), rix: ti.template(), riy: ti.template(), riz: ti.template()):
+	for i in range(M):
+		rix[i] = ri[i].x
+		riy[i] = ri[i].y
+		riz[i] = ri[i].z
+
+@ti.kernel
+def populateRJ(N: int, rj: ti.template(), rjx: ti.template(), rjy: ti.template(), rjz: ti.template()):
+	for j in range(N):
+		rjx[j] = rj[j].x
+		rjy[j] = rj[j].y
+		rjz[j] = rj[j].z
+
+@ti.kernel
+def populateD(M: int, N: int, dx: ti.template(), dy: ti.template(), dz: ti.template(), rix: ti.template(), riy: ti.template(), riz: ti.template(), rjx: ti.template(), rjy: ti.template(), rjz: ti.template()):
+	for i in range(M):
+		for j in range(N):
+			dx[i,j] = rix[i] - rjx[j]
+			dy[i,j] = riy[i] - rjy[j]
+			dz[i,j] = riz[i] - rjz[j]
 
 def getPairwiseSeparations(ri: ti.template(), rj: ti.template()):
 	"""
@@ -88,32 +111,27 @@ def getPairwiseSeparations(ri: ti.template(), rj: ti.template()):
 	rix = ti.field(float, shape=M)
 	riy = ti.field(float, shape=M)
 	riz = ti.field(float, shape=M)
+	populateRI(M, ri, rix, riy, riz)
 
-	for i in range(M):
-		rix[i] = ri[i].x
-		riy[i] = ri[i].y
-		riz[i] = ri[i].z
 	
 	# other set of points positions rj = (x,y,z)
 	rjx = ti.field(float, shape=N)
 	rjy = ti.field(float, shape=N)
 	rjz = ti.field(float, shape=N)
-	for j in range(N):
-		rjx[j] = rj[j].x
-		rjy[j] = rj[j].y
-		rjz[j] = rj[j].z
+	populateRJ(N, rj, rjx, rjy, rjz)
 	
 	# matrices that store all pairwise particle separations: r_i - r_j
 	dx = ti.field(float, shape=(M,N))
 	dy = ti.field(float, shape=(M,N))
 	dz = ti.field(float, shape=(M,N))
-	for i in range(M):
-		for j in range(N):
-			dx[i, j] = rix[i] - rjx[j]
-			dy[i, j] = riy[i] - rjy[j]
-			dz[i, j] = riz[i] - rjz[j]
+	populateD(M, N, dx, dy, dz, rix, riy, riz, rjx, rjy, rjz)
 	return dx, dy, dz
 	
+@ti.kernel 
+def populateRho(M: int, N: int, m: int, rho: ti.template(), res: ti.template()):
+	for i in range(M):
+		for j in range(N):
+			rho[i,j] = m * res[i,j]
 
 def getDensity( r, pos, m, h ):
 	"""
@@ -130,15 +148,16 @@ def getDensity( r, pos, m, h ):
 	dx, dy, dz = getPairwiseSeparations( r, pos )
 	rho = ti.field(float, shape=(M, 1))
 	res = W( dx, dy, dz, h )
-	for i in range(M):
-		for j in range(N):
-			rho[i, 0] = m * res[i,j]
-		
-	#rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
+	populateRho(M, N, m, rho, res)
 	
 	return rho
 	
 	
+@ti.kernel
+def populateP(M: int, k: float, n: float, rho: ti.template(), P: ti.template()):
+	for i in range(M):
+		P[i,0] = k * rho[i,0]**n
+
 def getPressure(rho, k, n):
 	"""
 	Equation of State
@@ -148,11 +167,27 @@ def getPressure(rho, k, n):
 	P     pressure
 	"""
 	P = ti.field(float, shape=rho.shape)
-	for i in range(rho.shape[0]):
-		P[i,0] = k * rho[i,0]**n
+	populateP(rho.shape[0], k, n, rho, P)
 	
 	return P
-	
+
+@ti.kernel	
+def populateA(N: int, m: float, ax: ti.template(), ay: ti.template(), az: ti.template(), P: ti.template(), rho: ti.template(), dWx: ti.template(), dWy: ti.template(), dWz: ti.template()):
+	for i in range(N):
+		ax[N, 0] = m * ((P[i,0] / ((rho[i,0]**2 + .005))) + (P[i, 0]/(rho[i,0]**2 + .005))) * dWx[i, 0]
+		ay[N, 0] = m * ((P[i,0] / ((rho[i,0]**2 + .005))) + (P[i, 0]/(rho[i,0]**2 + .005))) * dWy[i, 0]
+		az[N, 0] = m * ((P[i,0] / ((rho[i,0]**2 + .005))) + (P[i, 0]/(rho[i,0]**2 + .005))) * dWz[i, 0]
+
+
+@ti.kernel
+def populateANew(N: int, nu: float, lmbda: ti.template(), ax: ti.template(), ay: ti.template(), az: ti.template(), vel: ti.template(), pos: ti.template(), a: ti.template()):
+	for i in range(N):
+		new_a_x = ax[i, 0] - (lmbda[0] * pos[i].x - (nu * vel[i].x))
+		new_a_y = ay[i, 0] - (lmbda[1] * pos[i].y - (nu * vel[i].y))
+		new_a_z = az[i, 0] - (lmbda[2] * pos[i].z - (nu * vel[i].z))
+		a[i,0] = ti.Vector([new_a_x, new_a_y, new_a_z])
+
+
 
 def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	"""
@@ -183,23 +218,15 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	ax = ti.field(float, shape=(N,1))
 	ay = ti.field(float, shape=(N,1))
 	az = ti.field(float, shape=(N,1))
-	for i in range(N):
-		ax[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWx[i, 0]
-		ay[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWy[i, 0]
-		az[N, 0] = m * ((P[i,0] / (rho[i,0]**2)) + P[i, 0]/rho[i,0]**2) * dWz[i, 0]
-
+	populateA(N, m, ax, ay, az, P, rho, dWx, dWy, dWz)
 
 	
 	# pack together the acceleration components
 	# Add external potential force
 	a = ti.Vector.field(3, float, (N,1))
-	for i in range(N):
-		new_a_x = ax[i, 0] - (lmbda[0] * pos[i].x - (nu * vel[i].x))
-		new_a_y = ay[i, 0] - (lmbda[1] * pos[i].y - (nu * vel[i].y))
-		new_a_z = az[i, 0] - (lmbda[2] * pos[i].z - (nu * vel[i].z))
-		a[i,0] = ti.Vector([new_a_x, new_a_y, new_a_z])
+	populateANew(N, nu, lmbda, ax, ay, az, vel, pos, a)
 
-	
+	print(pos)
 	
 	return a
 	
@@ -244,8 +271,8 @@ def main():
 
 	# Initialize particle positions/colors randomly 
 	for i in range(0, N):
-		pos[i] = ti.Vector([[1, 2, 3]])
-		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
+		pos[i] = ti.Vector([[random.uniform(4,5), random.uniform(4,5), random.uniform(4,5)]])
+		colors[i] = ti.Vector([1, 1, 1])
 	
 
 	# calculate initial gravitational accelerations

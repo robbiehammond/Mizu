@@ -33,7 +33,6 @@ def gradW( x, y, z, h ):
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
-	print(n)
 	wx = n * x
 	wy = n * y
 	wz = n * z
@@ -150,7 +149,7 @@ def main():
 	# Simulation parameters
 	# Note: Beware settings minimum X/Y/Z values to negative, especially Y: forces like gravity will begin to work in reverse
 	### ---------------------------------------------- ###
-	N          = 100    # Number of particles
+	N          = 1000    # Number of particles
 	t          = 0      # current time of the simulation
 	dt         = 0.04   # timestep
 	h          = 0.1    # smoothing length
@@ -183,7 +182,7 @@ def main():
 
 	# Initialize particle positions/colors randomly 
 	for i in range(0, N):
-		pos[i] = np.array([[1,2,3]])
+		pos[i] = np.array([np.random.uniform(0, 4), np.random.uniform(0, 4), np.random.uniform(0, 4)])
 		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
 	
 
