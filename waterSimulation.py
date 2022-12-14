@@ -1,10 +1,11 @@
 import numpy as np
 from scipy.special import gamma
 import taichi as ti
+import random
 ti.init(arch=ti.cpu)
 first = True
 
-def W( x, y, z, h ):
+def W( x, y, h ):
 	"""
 	Gausssian Smoothing kernel (3D)
 	x     is a vector/matrix of x positions
@@ -13,14 +14,15 @@ def W( x, y, z, h ):
 	h     is the smoothing length
 	w     is the evaluated smoothing function
 	"""
-	r = np.sqrt(x**2 + y**2 + z**2)
+	r = np.sqrt(x**2 + y**2)
 	
 	w = (1.0 / (h*np.sqrt(np.pi)))**3 * np.exp( -r**2 / h**2)
 	
 	return w
 	
 	
-def gradW( x, y, z, h ):
+def gradW( x, y, h ):
+
 	global first
 	"""
 	Gradient of the Gausssian Smoothing kernel (3D)
@@ -30,14 +32,13 @@ def gradW( x, y, z, h ):
 	h     is the smoothing length
 	wx, wy, wz     is the evaluated gradient
 	"""
-	r = np.sqrt(x**2 + y**2 + z**2)
+	r = np.sqrt(x**2 + y**2 )
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
 	wx = n * x
 	wy = n * y
-	wz = n * z
 	
-	return wx, wy, wz
+	return wx, wy
 	
 	
 def getPairwiseSeparations( ri, rj ):
@@ -54,18 +55,18 @@ def getPairwiseSeparations( ri, rj ):
 	# positions ri = (x,y,z)
 	rix = ri[:,0].reshape((M,1))
 	riy = ri[:,1].reshape((M,1))
-	riz = ri[:,2].reshape((M,1))
+	#riz = ri[:,2].reshape((M,1))
 	
 	# other set of points positions rj = (x,y,z)
 	rjx = rj[:,0].reshape((N,1))
 	rjy = rj[:,1].reshape((N,1))
-	rjz = rj[:,2].reshape((N,1))
+	#rjz = rj[:,2].reshape((N,1))
 	
 	# matrices that store all pairwise particle separations: r_i - r_j
 	dx = rix - rjx.T
 	dy = riy - rjy.T
-	dz = riz - rjz.T
-	return dx, dy, dz
+	#dz = riz - rjz.T
+	return dx, dy
 	
 
 def getDensity( r, pos, m, h ):
@@ -80,9 +81,9 @@ def getDensity( r, pos, m, h ):
 	"""
 	M = r.shape[0]
 	
-	dx, dy, dz = getPairwiseSeparations( r, pos )
+	dx, dy = getPairwiseSeparations( r, pos )
 
-	rho = np.sum( m * W(dx, dy, dz, h), 1 ).reshape((M,1))
+	rho = np.sum( m * W(dx, dy, h), 1 ).reshape((M,1))
 	
 	return rho
 	
@@ -122,16 +123,15 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 	P = getPressure(rho, k, n)
 	
 	# Get pairwise distances and gradients
-	dx, dy,dz = getPairwiseSeparations( pos, pos )
-	dWx, dWy, dWz = gradW( dx, dy, dz, h )
+	dx, dy = getPairwiseSeparations( pos, pos )
+	dWx, dWy= gradW( dx, dy, h )
 	
 	# Add Pressure contribution to accelerations
 	ax = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWx, 1).reshape((N,1))
 	ay = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWy, 1).reshape((N,1))
-	az = - np.sum( m * ( P/rho**2 + P.T/rho.T**2  ) * dWz, 1).reshape((N,1))
 	
 	# pack together the acceleration components
-	a = np.hstack((ax,ay,az))
+	a = np.hstack((ax,ay))
 	
 	# Add external potential force
 	a -= lmbda * pos
@@ -145,7 +145,7 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 
 def main():
 	""" N-body simulation """
-	
+	r = lambda: random.randint(0,255)	
 	# Simulation parameters
 	# Note: Beware settings minimum X/Y/Z values to negative, especially Y: forces like gravity will begin to work in reverse
 	### ---------------------------------------------- ###
@@ -173,24 +173,24 @@ def main():
 
 	np.random.seed(seed) #set random seed
 
-	lmbda = np.array([[external_X, external_Y, external_Z]]) # pack external force constants into a vector
+	lmbda = np.array([[external_X, external_Y]]) # pack external force constants into a vector
 	
-	pos = np.zeros(shape=(N, 3))         # particle positions
+	pos = np.zeros(shape=(N, 2))         # particle positions
 	vel = np.zeros(pos.shape)        # particle velocities (all initialized to 0)
-	pos_field = ti.Vector.field(3, float, shape=(N,))
-	colors = ti.Vector.field(3, float, shape=(N,))
+	pos_field = ti.Vector.field(2, float, shape=(N,))
+	colors = [0] * N
 
 	# Initialize particle positions/colors randomly 
+
 	for i in range(0, N):
-		pos[i] = np.array([np.random.uniform(0, 4), np.random.uniform(0, 4), np.random.uniform(0, 4)])
-		colors[i] = ti.Vector([np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)])
+		pos[i] = np.array([np.random.uniform(0, 4), np.random.uniform(0, 4)])
 	
 
 	# calculate initial gravitational accelerations
 	acc = getAcc( pos, vel, m, h, k, n, lmbda, nu )
 	
-	window = ti.ui.Window('N-Body', (1280, 720), vsync=True)
-	canvas = window.get_canvas()
+	window = ti.GUI('N-Body', (1280, 720))
+	#canvas = window.get_canvas()
 	camera = ti.ui.Camera()
 	scene = ti.ui.Scene()
 	
@@ -228,22 +228,9 @@ def main():
 		vel[out_of_top_boundary, 1] *= df
 		pos[out_of_top_boundary, 1] = max_Y
 
-		out_of_back_boundary = pos[:, 2] < min_Z
-		vel[out_of_back_boundary, 2] *= df
-		pos[out_of_back_boundary, 2] = min_Z
-
-		out_of_front_boundary = pos[:, 2] > max_Z
-		vel[out_of_front_boundary, 2] *= df
-		pos[out_of_front_boundary, 2] = max_Z
-
 
 		# render stuff
-		pos_field.from_numpy(pos)
-		camera.track_user_inputs(window, hold_key=ti.ui.LMB)
-		scene.ambient_light((1, 1, 1))
-		scene.particles(pos_field, radius=0.05, per_vertex_color=colors)
-		scene.set_camera(camera)
-		canvas.scene(scene)
+		window.circles(pos)
 		window.show()
 	
 
