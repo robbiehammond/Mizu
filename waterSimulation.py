@@ -4,14 +4,6 @@ import taichi as ti
 ti.init(arch=ti.cpu)
 
 def W( x, y, z, h ):
-	"""
-	Gausssian Smoothing kernel (3D)
-	x     is a vector/matrix of x positions
-	y     is a vector/matrix of y positions
-	z     is a vector/matrix of z positions
-	h     is the smoothing length
-	w     is the evaluated smoothing function
-	"""
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	w = (1.0 / (h*np.sqrt(np.pi)))**3 * np.exp( -r**2 / h**2)
@@ -20,14 +12,6 @@ def W( x, y, z, h ):
 	
 	
 def gradW( x, y, z, h ):
-	"""
-	Gradient of the Gausssian Smoothing kernel (3D)
-	x     is a vector/matrix of x positions
-	y     is a vector/matrix of y positions
-	z     is a vector/matrix of z positions
-	h     is the smoothing length
-	wx, wy, wz     is the evaluated gradient
-	"""
 	r = np.sqrt(x**2 + y**2 + z**2)
 	
 	n = -2 * np.exp( -r**2 / h**2) / h**5 / (np.pi)**(3/2)
@@ -39,12 +23,6 @@ def gradW( x, y, z, h ):
 	
 	
 def getPairwiseSeparations( ri, rj ):
-	"""
-	Get pairwise desprations between 2 sets of coordinates
-	ri    is an M x 3 matrix of positions
-	rj    is an N x 3 matrix of positions
-	dx, dy, dz   are M x N matrices of separations
-	"""
 	M = ri.shape[0]
 	N = rj.shape[0]
 	
@@ -67,14 +45,6 @@ def getPairwiseSeparations( ri, rj ):
 	
 
 def getDensity( r, pos, m, h ):
-	"""
-	Get Density at sampling loctions from SPH particle distribution
-	r     is an M x 3 matrix of sampling locations
-	pos   is an N x 3 matrix of SPH particle positions
-	m     is the particle mass
-	h     is the smoothing length
-	rho   is M x 1 vector of accelerations
-	"""
 	M = r.shape[0]
 	
 	dx, dy, dz = getPairwiseSeparations( r, pos )
@@ -85,31 +55,12 @@ def getDensity( r, pos, m, h ):
 	
 	
 def getPressure(rho, k, n):
-	"""
-	Equation of State
-	rho   vector of densities
-	k     equation of state constant
-	n     polytropic index
-	P     pressure
-	"""
 	P = k * rho**(1+1/n)
 	
 	return P
 	
 
 def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
-	"""
-	Calculate the acceleration on each SPH particle
-	pos   is an N x 3 matrix of positions
-	vel   is an N x 3 matrix of velocities
-	m     is the particle mass
-	h     is the smoothing length
-	k     equation of state constant
-	n     polytropic index
-	lmbda external force constant
-	nu    viscosity
-	a     is N x 3 matrix of accelerations
-	"""
 	N = pos.shape[0]
 	
 	# Calculate densities at the position of the particles
@@ -141,8 +92,6 @@ def getAcc( pos, vel, m, h, k, n, lmbda, nu ):
 
 
 def main():
-	""" N-body simulation """
-	
 	# Simulation parameters
 	# Note: Beware settings minimum X/Y/Z values to negative, especially Y: forces like gravity will begin to work in reverse
 	### ---------------------------------------------- ###
@@ -155,7 +104,7 @@ def main():
 	nu         = .3     # viscosity damping
 	m          = 1      # single particle mas
 	g          = 9.8	# gravity
-	df         = -0.9   # damping factor (negative = lose energy on collision, positive = gain energy on collision)
+	df         = -0.7   # damping factor
 	external_X = 0.0    #external constant x force
 	external_Y = g      #external constant y force (note positive is down)
 	external_Z = 0.0    #external constant z force
